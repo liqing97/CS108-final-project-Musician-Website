@@ -1,0 +1,697 @@
+# CS108-final-project-Musician-Website
+A simple version of a musician website, which can create musician's profile, follow list and followerlist.
+#!/usr/bin/python
+#
+# "she-bang" line is a directive to the web server: where to find python
+#
+# filename: final.py
+# description: A simple version of a musician website, which can create musician's profile, follow list and followerlist.
+
+
+import MySQLdb as db
+import time
+import random
+import cgi
+import cgitb; cgitb.enable()
+
+print("Content-Type: text/html")
+print("") # blank line
+
+################################################################################
+def getConnectionAndCursor():
+    """
+    This function will connect to the database and return the
+    Connection and Cursor objects.
+    """ 
+    # connect to the MYSQL database
+    conn = db.connect(host="localhost",
+                      user="liqing97",
+                      passwd="2942",
+                      db="liqing97")
+
+    cursor = conn.cursor()
+    return conn, cursor
+
+################################################################################
+def doHTMLHead(title):
+#write the head, make the title center
+    print("""
+    <html>
+    <head>
+    <title>%s</title>
+    </head>
+    <body bgcolor="#2EFEF7">
+    <h1><p align="center">%s</p></h1>
+    """ % (title, title))
+
+
+################################################################################
+def doHTMLTail():
+
+    # always show this link to go back to the main page
+    print("""
+    <p>
+    <hr>
+    <a href="./final.py"><p align="center">Return to main page.</p></a><br>
+    <p align="center">This page was generated at %s.</p>
+    </body>
+    </html>
+
+    """ % time.ctime())
+
+################################################################################
+def debugFormData(form):
+    """
+    A helper function which will show us all of the form data that was
+    sent to the server in the HTTP form.
+    """
+    
+    print("""
+    <h2>DEBUGGING INFORMATION</h2>
+    <p>
+    Here are the HTTP form data:
+    """)
+    print("""
+    <table border=1>
+        <tr>
+            <th>key name</th>
+            <th>value</th>
+        </tr>
+    """)
+    
+    # form behaves like a python dict
+    keyNames = form.keys()
+    # note that there is no .values() method -- this is not an actual dict
+
+    ## use a for loop to iterate all keys/values
+    for key in keyNames:
+
+        ## discover: do we have a list or a single MiniFieldStorage element?
+        if type(form[key]) == list:
+
+            # print out a list of values
+            values = form.getlist(key)
+            print("""
+        <tr>
+            <td>%s</td>
+            <td>%s</td>
+        </tr>
+            """ % (key, str(values)))
+
+        else:
+            # print the MiniFieldStorage object's value
+            value = form[key].value
+            print("""
+        <tr>
+            <td>%s</td>
+            <td>%s</td>
+        </tr>
+            """ % (key, value))
+        
+    print("""
+    </table>
+    <h3>End of HTTP form data</h3>
+    <hr>
+    """)
+
+## end: def debugFormData(form)
+    
+    
+################################################################################
+def getAllUsers():
+    """
+    Middleware function to get all users from the profiles table.
+    Returns a list of tuples of (idnum, lastname, firstname).
+    """
+
+    # connect to database
+    conn, cursor = getConnectionAndCursor()
+
+    # build SQL
+    sql = """
+    SELECT ID, lastname, firstname
+    FROM Musicians
+    """
+
+    # execute the query
+    cursor.execute(sql)
+
+    # get the data from the database:
+    data = cursor.fetchall()
+
+    # clean up
+    conn.close()
+    cursor.close()
+    
+    return data
+
+## end: def getAllUsers():
+
+################################################################################
+def getOneProfile(idNum):
+    """
+    Middleware function to retrieve one profile record from the database.
+    Returns a list containing one tuple.
+    """
+    
+    # connect to database
+    conn, cursor = getConnectionAndCursor()
+
+    # build SQL
+    sql = """
+    SELECT *
+    FROM Musicians
+    WHERE ID=%s
+    """
+
+    # execute the query
+    parameters = (int(idNum), )
+    cursor.execute(sql, parameters)
+
+    # get the data from the database:
+    data = cursor.fetchall()
+
+    # clean up
+    conn.close()
+    cursor.close()
+    
+    return data
+
+## end: def getOneProfile(idNum):
+
+
+################################################################################
+def showAllUsers(data):
+    """
+    Presentation layer function to display a table containing all users' lastnames
+    and first names.
+    """
+
+    ## create an HTML table for output:
+    print("""
+    <center><h2>Musician List</h2>
+    <p>
+    <form>
+    <input type="text" name="SearchCity">
+    <input type="submit" name="searchCity" value="Search a musician by city">  
+    </form>
+    
+    <center><table border=1>
+      <tr>
+        <td><font size=+2"><b>lastname</b></font></td>
+        <td><font size=+2"><b>firstname</b></font></td>
+      </tr>
+    """)
+    
+    for row in data:
+
+        # each iteration of this loop creates on row of output:
+        (idNum, lastname, firstName) = row
+
+        print("""
+      <tr>
+        <td><a href="?idNum=%s">%s</a></td>
+        <td><a href="?idNum=%s">%s</a></td>
+      </tr>
+        """ % (idNum, lastname, idNum, firstName,))
+        
+
+    print("""
+    </table>
+    """)
+    print("Found %d users.<br>" % len(data))
+# write a button to add person's profile
+    print("""
+    <form>
+    <input type="submit" name="addAProfile" value="Add a new profile">   
+    </form>
+    """)
+
+
+## end: def showAllUsers(data):
+################################################################################
+def showProfilePage(data):
+    """
+    Presentation layer function to display the profile page for one user.
+    """
+
+    ## show profile information
+    (idNum, lastname, firstname,city, email, instrument) = data[0]
+
+    print("""
+    <center><h2>%s %s's Profile Page</h2>
+    <p>
+
+    <p>
+    <center><table style= "width:575px">
+    	<tr>
+    		<td><img src = %s.jpg width = 300 height = 300></td>
+    		<td>
+			    <table>
+			    	<tr>
+			            <td><font size="6">City: </td>
+			            <td><font size="6">%s</td>
+			        </tr>
+			        <tr>
+			            <td><font size="6">Email: </td>
+			            <td><font size="6">%s</td>
+			        </tr>
+			        <tr>
+			            <td><font size="6">Instrument: </td>
+			            <td><font size="6">%s</td>
+			        </tr>
+			    </table>
+			</td>
+	</table></center>
+    """ % (firstname, lastname,idNum, city, email, instrument))
+#Give some input text form and button to do multiple funciton
+    print("""
+    <form>
+    <input type="hidden" name="idNum" value="%s">
+    <p>
+    <input type="text" name="friendIDnumber">
+    <input type="submit" name="followSomeone" value="Follow someone">
+    <p>
+    <input type="submit" name="followlist" value="follow list">
+    <input type="submit" name="follower" value="follower's list">
+    <p>
+    <input type="submit" name="updateProfile" value="Update Profile">
+    </form>
+    """ % (idNum))
+
+
+## end: def showProfilePage(data):
+################################################################################
+def updateProfile(idNum, city, email, instrument):
+
+#conncet to database
+    conn, cursor = getConnectionAndCursor()
+#build sql
+    sql="""
+    UPDATE Musicians
+    SET city=%s,
+    email=%s,
+    instrument=%s
+    WHERE ID=%s
+    """
+#execute
+    parameters = (city, email, instrument, int(idNum))
+
+    cursor.execute(sql, parameters)
+# count how many line was effected
+    rowcount = cursor.rowcount
+#clean up
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return rowcount
+################################################################################
+def showUpdateProfileForm(data):
+#use dictionary to separate detail from data
+    record = data[0]
+    idNum = record[0]
+    firstname = record[1]
+    lastname = record[2]
+    fields = record + (idNum, firstname, lastname)
+
+# show update profle form to make user update information
+    print("""
+    <h2>Update Profile Form</h2>
+    <form>
+    <table>
+        <tr>
+            <td>Profile ID</td>
+            <td>%s</td>
+        </tr>
+        <tr>
+            <td>Last Name</td>
+            <td>%s</td>
+        </tr>
+        <tr>
+            <td>First Name</td>
+            <td>%s</td>
+        </tr>
+        <tr>
+            <td>city</td>
+            <td><input type="text" name="city" value="%s"></td>
+        </tr>
+        <tr>
+            <td>Email</td>
+            <td><input type="text" name="email" value="%s"></td>
+        </tr>
+        <tr>
+            <td>instrument</td>
+            <td><input type="text" name="instrument" value="%s"></td>
+        </tr>
+        
+        <tr>
+            <td><input type="submit" name="completeUpdateProfile" value="Update Profile"></td>
+        </tr>
+    </table>
+
+    <input type="hidden" name ="idNum" value ="%s">
+    <input type="hidden" name="firstname" value="%s">
+    <input type="hidden" name="lastname" value="%s">
+    </form>
+    """ % fields)
+
+################################################################################
+def addProfile(lastname, firstname,city, email, instrument):
+#connect database
+    conn, cursor = getConnectionAndCursor()
+#write sql statement
+    sql = """
+    SELECT max(ID)
+    FROM Musicians
+    """
+#execute
+    cursor.execute(sql, )
+    result = cursor.fetchone()
+    (idnumber, ) = result
+# get a new ID
+    nextID = idnumber +1
+#do another sql statement
+    sql = """
+    INSERT INTO Musicians VALUES
+    (%s,%s,%s,%s,%s,%s)
+    """
+#execute
+    # execute the query
+    parameters = (nextID, lastname, firstname,city, email, instrument)
+    cursor.execute(sql, parameters)
+
+    # get the data from the database:
+    rowcount = cursor.rowcount
+# clean up
+    conn.commit()
+
+    # clean up
+    conn.close()
+    cursor.close()
+    
+    return rowcount
+
+###############################################################################################
+def showAddProfileForm():
+# show add profile form
+    print("""
+
+    <form>
+    
+    <table>
+
+        <tr>
+           <td>lastname</td>
+           <td><input type="text" name="lastname"></td>
+        </tr>
+        <tr>
+           <td>firstname</td>
+           <td><input type="text" name="firstname"></td>
+        </tr>
+        <tr>
+           <td>city</td>
+           <td><input type="text" name="city"></td>
+        </tr>
+        <tr>
+           <td>email</td>
+           <td><input type="text" name="email"></td>
+        </tr>
+        <tr>
+           <td>instrument</td>
+           <td><input type="text" name="instrument"></td>
+        </tr>
+        <tr>
+           <td><input type="submit" name="AddProfile" value="add a new profile"></td>
+        </tr>
+    </table>
+    </form>
+
+    """)
+
+    
+################################################################################
+def followSomeone(idNum, friendID):
+#connect to database
+
+    conn, cursor = getConnectionAndCursor()
+#do sql
+    sql = """
+    INSERT INTO Friends VALUE
+    (%s, %s)
+    """
+#execute
+    parameters = (int(idNum), int(friendID))
+    cursor.execute(sql, parameters)
+    
+    rowcount = cursor.rowcount
+
+    conn.commit()
+#clean up
+    conn.close()
+    cursor.close()
+
+    return rowcount
+    
+################################################################################
+def followlist(idNum):
+# connect to database
+    conn, cursor = getConnectionAndCursor()
+# do sql
+    sql = """
+    SELECT *
+    FROM Friends
+    WHERE ID=%s
+    """
+#execute
+    parameters = (int(idNum),)
+
+    cursor.execute(sql, parameters)
+
+    data = cursor.fetchall()
+#clean up
+    conn.close()
+    cursor.close()
+
+    return data
+    
+################################################################################
+def showFollowlist(idNum, data):
+# print out the follow list
+    print("""
+    <h2>Follow List</h2>
+    <p>
+    <table border=1>
+    """)
+    for idNum in data:
+
+        friendID = idNum[1]
+        dataFriend = getOneProfile(friendID)
+        (idNum, lastname, firstName,city, email, instrument) = dataFriend[0]
+        
+        print("""
+      <tr>
+        <td><a href="?idNum=%s">%s</a></td>
+        <td><a href="?idNum=%s">%s</a></td>
+      </tr>
+        """ % (idNum, lastname, idNum, firstName,))
+    print("""
+    </table>
+    """)
+
+################################################################################
+def followerlist(idNum):
+#connect to database
+    conn, cursor = getConnectionAndCursor()
+#do sql statement
+    sql = """
+    SELECT *
+    FROM Friends
+    WHERE friendID=%s
+    """
+#execute
+    parameters = (int(idNum),)
+
+    cursor.execute(sql, parameters)
+
+    data = cursor.fetchall()
+#clean up
+    conn.close()
+    cursor.close()
+
+    return data
+    
+################################################################################
+def showFollowerlist(idNum, data):
+#print out follower's list
+    print("""
+    <h2>Followers' List</h2>
+    <p>
+    <table border=1> 
+    """)
+    for idNum in data:
+
+        friendID = idNum[0]
+        dataFriend = getOneProfile(friendID)
+        (idNum, lastname, firstName,city, email, instrument) = dataFriend[0]
+        
+        print("""
+      <tr>
+        <td><a href="?idNum=%s">%s</a></td>
+        <td><a href="?idNum=%s">%s</a></td>
+      </tr>
+        """% (idNum, lastname, idNum, firstName,))
+
+    print("""</table>""")
+
+
+################################################################################
+#use city to search database
+def searchByCity(city):
+# Do if statement
+	if city == " ":
+		print """Please enter a city."""
+	else:
+		city = formatCity(city)
+		conn, cursor = getConnectionAndCursor()
+		# do sql
+		sql = """
+	    SELECT *
+	    FROM Musicians
+	    WHERE city = %s
+	    """
+		parameter = (city,)
+		cursor.execute(sql, parameter)
+		data = cursor.fetchall()
+		#if not in data, do following things
+		if len(data) == 0:
+			print """We did not find any musicians in where you are looking for."""
+# if in data, show it profile
+		else:
+			showProfilePage(data)
+	
+
+################################################################################
+
+# seperate
+def formatCity(city):
+	if len(city) == 1:
+		return city.upper()
+	else:
+	    b = city.split()
+	    for i in range(len(b)):
+	        b[i] = b[i][0].upper() + b[i][1:]
+	    return " ".join(b)
+
+################################################################################
+#main function
+if __name__ == "__main__":
+
+    # get form field data
+    form = cgi.FieldStorage()
+    
+    doHTMLHead("Musician's home")
+#    debugFormData(form)
+    
+    ## add decision-logic to determine whether to show one profile,
+    ##or else show the list of all users.
+# check if the requirements are satisfied
+
+#if you click update profile button
+        
+    if "updateProfile" in form:
+#show update profile page
+        idNum = form["idNum"].value
+        data = getOneProfile(idNum)
+
+        showUpdateProfileForm(data)
+
+    
+#in the profile page, click the complete button
+    elif "completeUpdateProfile" in form:
+
+        idNum = form["idNum"].value
+
+        city = form["city"].value
+        
+        email = form["email"].value
+
+        instrument = form["instrument"].value
+        
+#update and show it's accomplished
+        rowcount = updateProfile(idNum, city, email, instrument)
+
+        if rowcount == 1:
+            
+            print("<b>You have already updated your profile.</b>")
+#use search function to find musician in specific city
+    elif "searchCity" in form:
+
+        city = form["SearchCity"].value
+
+        searchByCity(city)
+#click add profile button on the main page and show a special add profile page
+    elif "addAProfile" in form:
+
+        showAddProfileForm()
+#click add profile button in the new page to insert information
+    elif "AddProfile" in form:
+
+        lastname = form["lastname"].value
+    
+        firstname = form["firstname"].value
+    
+        city = form["city"].value
+        
+        email = form["email"].value
+
+        instrument = form["instrument"].value
+
+        rowcount = addProfile(lastname, firstname,city, email, instrument)
+        
+        if rowcount == 1:
+
+            print("<b>You have already updated your profile</b>")
+#click a button to follow others
+    elif "followSomeone" in form:
+
+        idNum = form["idNum"].value
+        friendID = form["friendIDnumber"].value
+        followSomeone(idNum, friendID)
+#click a button to show a list containing all people's essential profile who you are following
+    elif "followlist" in form:
+
+        idNum = form["idNum"].value
+
+        data = followlist(idNum)
+#
+        showFollowlist(idNum, data)
+#clikc another button to show a list containing all people's essential profile who are following you
+    elif "follower" in form:
+
+        idNum = form["idNum"].value
+
+        data = followerlist(idNum)
+
+        showFollowerlist(idNum, data)
+#else just come to the main page show all profiles
+
+    elif "idNum" in form:
+#if there's only idNum in the form, just show profile
+        idNum = form["idNum"].value
+        data = getOneProfile(idNum)
+        showProfilePage(data)
+        
+    else:
+
+        data = getAllUsers()
+        showAllUsers(data) 
+
+
+#the end part
+    doHTMLTail()    
+
+
+
+
+
